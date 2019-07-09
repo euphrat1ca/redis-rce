@@ -7,6 +7,8 @@ This repo is a modified version of <https://github.com/n0b0dyCN/redis-rogue-serv
 
 Compile exp.so from <https://github.com/RicterZ/RedisModules-ExecuteCommand>.
 
+Reverse shell support module from <https://github.com/n0b0dyCN/redis-rogue-server/tree/master/RedisModulesSDK>
+
 
 ```
 usage: redis-rce.py [-h] -r RHOST [-p RPORT] -L LHOST [-P LPORT] [-f FILE]
