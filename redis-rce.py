@@ -39,7 +39,11 @@ def din(sock, cnt):
             print("\033[1;34;40m[->]\033[0m {}".format(msg))
         else:
             print("\033[1;34;40m[->]\033[0m {}......{}".format(msg[:80], msg[-80:]))
-    return msg.decode()
+    try:
+        result = msg.decode()
+    except:
+        result = msg
+    return result
 
 
 def dout(sock, msg):
@@ -216,8 +220,8 @@ def main():
     payload = open(filename, "rb").read()
     try:
         runserver(options.rhost, options.rport, options.lhost, options.lport)
-    except:
-        print("\033[1;31;m[-]\033[0m Error, exit..")
+    except Exception as e:
+        print("\033[1;31;m[-]\033[0m Error :{}, exit..".format(e))
 
 
 if __name__ == '__main__':
